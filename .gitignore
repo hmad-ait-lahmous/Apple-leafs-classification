@@ -1,0 +1,26 @@
+# Dataset images — large; train locally or attach as a release asset
+leafs/
+
+# Trained weights / checkpoints — regenerate with train_model.py
+model/*.h5
+model/*.keras
+model/*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+env/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local secrets
+.env
+.env.*
