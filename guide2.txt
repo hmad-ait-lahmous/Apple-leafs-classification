@@ -1,0 +1,588 @@
+================================================================================
+           APPLE LEAF DISEASE CLASSIFIER — COMPLETE PROJECT GUIDE
+================================================================================
+Project : AppleLeaf — AI Leaf Health Analyzer
+Author  : Hmad AIT LAHMOUS
+Date    : 2026-04-21
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 1 — WHAT IS THIS PROJECT?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This project is a deep learning–based web application that classifies apple leaf
+images into one of three health categories:
+
+  ┌──────────────────────┬─────────────────────────────────────────────────────┐
+  │  Class Name          │  Meaning                                            │
+  ├──────────────────────┼─────────────────────────────────────────────────────┤
+  │  Apple Normal        │  The leaf is healthy — no disease detected          │
+  │  Apple Black Spot    │  Fungal infection (Alternaria mali) — needs action  │
+  │  Apple Brown Spot    │  Bacterial/fungal lesions (Marssonina coronaria)    │
+  └──────────────────────┴─────────────────────────────────────────────────────┘
+
+The app provides:
+  - An instant prediction with a confidence score
+  - Personalized care tips for each disease
+  - A web interface where users can upload a photo OR use a live webcam
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 2 — THE TRAINED MODEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Model Name : MobileNetV2 (Transfer Learning + Fine-tuning)
+Framework  : TensorFlow / Keras
+Input Size : 224 × 224 pixels (RGB, 3 channels)
+Output     : Softmax over 3 classes (probability distribution)
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  FULL MODEL ARCHITECTURE                                                │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │                                                                         │
+  │   Input (224 × 224 × 3)                                                 │
+  │       ↓                                                                 │
+  │   MobileNetV2 Base                                                      │
+  │     ├─ Pre-trained on ImageNet (1.2M images, 1000 classes)              │
+  │     ├─ Extracts rich visual features (shapes, edges, textures)          │
+  │     └─ Output: feature map (7 × 7 × 1280)                              │
+  │       ↓                                                                 │
+  │   GlobalAveragePooling2D                                                │
+  │     └─ Flattens spatial features → 1280-dim vector                     │
+  │       ↓                                                                 │
+  │   BatchNormalization                                                    │
+  │     └─ Normalizes activations for stable training                      │
+  │       ↓                                                                 │
+  │   Dense(256, activation=ReLU)                                           │
+  │       ↓                                                                 │
+  │   Dropout(0.4)   ← prevents overfitting                                │
+  │       ↓                                                                 │
+  │   Dense(128, activation=ReLU)                                           │
+  │       ↓                                                                 │
+  │   Dropout(0.3)                                                          │
+  │       ↓                                                                 │
+  │   Dense(3, activation=Softmax)  ← final class probabilities            │
+  │                                                                         │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+Saved model files (generated after training):
+  - model/apple_leaf_model.h5        ← final model (used by the web app)
+  - model/apple_leaf_model.keras     ← Keras native format (alternate)
+  - model/class_indices.json         ← class name ↔ index mapping
+  - model/history_head.csv           ← Phase 1 training log (loss/accuracy)
+  - model/history_fine.csv           ← Phase 2 training log
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 3 — DATASET
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Dataset Name : Apple Leaf Disease Dataset (Plant Disease / PlantVillage variant)
+
+Dataset Link (Kaggle — most commonly used source):
+  https://www.kaggle.com/datasets/vikasukani/plant-disease-recognition-dataset
+  OR
+  https://www.kaggle.com/datasets/emmarex/plantdisease
+
+Official PlantVillage paper source:
+  https://github.com/spMohanty/PlantVillage-Dataset
+
+NOTE: The project README refers to an "Apple" subdirectory under a "leafs/"
+folder, which matches the standard PlantVillage-style directory structure.
+Download any PlantVillage / Apple Leaf Disease dataset and organize it as shown
+in Section 6 (Project Structure).
+
+Local Dataset Structure (after download and setup):
+  leafs/
+  └── Apple/
+      ├── train/
+      │   ├── Apple black_spot/    (≈469 images)
+      │   ├── Apple Brown_spot/    (≈1060 images)
+      │   └── Apple Normal/        (≈824 images)
+      └── test/
+          ├── Apple black_spot/
+          ├── Apple Brown_spot/
+          └── Apple Normal/
+
+Total training images : ~2353
+Validation split      : 15% of training data (automatically split in code)
+Image format          : JPG / PNG
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 4 — THE ALGORITHM: MobileNetV2 + TRANSFER LEARNING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+─── 4.1 What is MobileNetV2? ───────────────────────────────────────────────────
+
+MobileNetV2 is a lightweight Convolutional Neural Network (CNN) designed by
+Google (2018) for mobile and embedded vision tasks. It uses a technique called
+"Inverted Residuals with Linear Bottlenecks" to be very efficient:
+
+  - Much smaller model size than VGG16 / ResNet50
+  - Faster inference (great for real-time apps)
+  - Still highly accurate on image classification tasks
+  - Pre-trained on ImageNet (1.2M images, 1000 categories)
+
+Key building block: Depthwise Separable Convolutions
+  Standard convolution: expensive (filters across all channels at once)
+  Depthwise Separable: splits into:
+    1. Depthwise convolution   → filter each channel independently
+    2. Pointwise convolution   → combine channels with 1×1 convolutions
+    → Result: Same effect, ~8–9× fewer computations!
+
+─── 4.2 What is Transfer Learning? ─────────────────────────────────────────────
+
+Instead of training a CNN from scratch (which requires millions of images and
+hours of compute), Transfer Learning reuses a model already trained on a large
+dataset (ImageNet) and adapts it to a new, smaller, domain-specific dataset.
+
+Why it works:
+  - Early CNN layers learn generic features: edges, corners, textures, colors
+  - These features are universal — useful for any image recognition task
+  - Only the final "head" layers need to learn task-specific features
+  - Result: much faster training, much less data needed
+
+Analogy:
+  Imagine an expert biologist learning to identify apple diseases. They already
+  understand what leaves, shapes, colors, and textures look like (pre-training).
+  They just need to study apple disease patterns specifically (fine-tuning).
+
+─── 4.3 What is Fine-Tuning? ───────────────────────────────────────────────────
+
+Fine-tuning goes one step beyond transfer learning. After training the custom
+head, the top layers of the base model are selectively "unfrozen" and retrained
+at a very low learning rate. This allows:
+  - The base model's top features to adapt to apple leaf-specific patterns
+  - Better accuracy without the risk of destroying learned low-level features
+  - Gradual specialization of the entire model for the target task
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 5 — TRAINING PROCESS (STEP BY STEP)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The training is handled by: train_model.py
+It follows a 2-phase strategy.
+
+━ STEP 1: DATA LOADING & AUGMENTATION ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Images are loaded from leafs/Apple/train/ using Keras ImageDataGenerator.
+All images are rescaled from [0, 255] → [0.0, 1.0] (normalization).
+
+Data Augmentation is applied to the training set to artificially increase
+variety and prevent overfitting. Augmentations used:
+
+  ┌──────────────────────────┬─────────────────────────────────────────────┐
+  │  Augmentation            │  Effect                                     │
+  ├──────────────────────────┼─────────────────────────────────────────────┤
+  │  rotation_range=20       │  Rotate image up to ±20 degrees             │
+  │  width_shift_range=0.15  │  Shift image left/right up to 15%          │
+  │  height_shift_range=0.15 │  Shift image up/down up to 15%             │
+  │  shear_range=0.1         │  Apply shearing transformation              │
+  │  zoom_range=0.2          │  Zoom in/out up to 20%                     │
+  │  horizontal_flip=True    │  Randomly mirror images horizontally        │
+  │  brightness_range=[0.8,  │  Randomly vary brightness ±20%             │
+  │                   1.2]   │                                             │
+  │  fill_mode="nearest"     │  Fill empty pixels after transform          │
+  └──────────────────────────┴─────────────────────────────────────────────┘
+
+Validation split: 15% of training images are held out for validation.
+Test set: loaded separately from leafs/Apple/test/ (no augmentation).
+
+Config:
+  - IMG_SIZE   = 224 × 224 pixels
+  - BATCH_SIZE = 32
+  - SEED       = 42 (for reproducibility)
+
+━ STEP 2: PHASE 1 — TRAIN THE HEAD (FROZEN BASE) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Goal: Teach the new classification layers (head) using pre-extracted features.
+
+What happens:
+  1. MobileNetV2 base is loaded with ImageNet weights
+  2. The entire base is FROZEN (base.trainable = False)
+     → None of the base weights are updated during training
+  3. Only the custom head layers (Dense, BatchNorm, Dropout) are trained
+  4. Optimizer: Adam with learning rate = 0.001 (1e-3)
+  5. Loss function: Categorical Crossentropy (standard for multi-class)
+  6. Metric: Accuracy
+
+Callbacks used:
+  - EarlyStopping(patience=4):
+      Stops training if val_loss doesn't improve for 4 consecutive epochs.
+      Restores the best model weights automatically.
+  - ReduceLROnPlateau(factor=0.5, patience=2):
+      Halves the learning rate if val_loss plateaus for 2 epochs.
+      Minimum LR: 1e-6
+  - CSVLogger → saves training history to model/history_head.csv
+
+Max epochs: 10 (may stop earlier with EarlyStopping)
+
+━ STEP 3: PHASE 2 — FINE-TUNE TOP LAYERS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Goal: Further improve accuracy by adapting the top layers of MobileNetV2 to
+apple leaf visual patterns.
+
+What happens:
+  1. Base model is UNFROZEN (base.trainable = True)
+  2. But only the LAST 30 layers are trainable:
+       for layer in base.layers[:-30]:
+           layer.trainable = False
+     → Earlier layers stay frozen (they learn basic edge/texture features,
+       no need to change them)
+  3. Model is recompiled with a MUCH LOWER learning rate: 0.0001 (1e-4)
+     → Small LR prevents destroying the fine-tuned base weights
+  4. Same loss (Categorical Crossentropy) and metric (Accuracy)
+
+Callbacks used:
+  - ModelCheckpoint:
+      Saves the best model to model/best_model.h5 when val_accuracy improves
+  - EarlyStopping(patience=6):
+      More patience this time (fine-tuning can be slow to start improving)
+  - ReduceLROnPlateau(factor=0.3, patience=3):
+      Reduces LR more aggressively (by 70%) if stuck
+  - CSVLogger → saves history to model/history_fine.csv
+
+Max epochs: 20 (may stop earlier)
+
+━ STEP 4: EVALUATION ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After both phases:
+  - Model is evaluated on the TEST set (unseen data)
+  - Reports: Test Accuracy and Test Loss
+
+━ STEP 5: SAVE MODEL ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Two files are saved:
+  - model/apple_leaf_model.h5   ← used by app.py at runtime
+  - model/class_indices.json    ← class name-to-index mapping
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 6 — PROJECT FILE STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Apple-leafs-classification/
+  ├── leafs/                         ← Dataset (you provide this)
+  │   └── Apple/
+  │       ├── train/
+  │       │   ├── Apple black_spot/  (469 images)
+  │       │   ├── Apple Brown_spot/  (1060 images)
+  │       │   └── Apple Normal/      (824 images)
+  │       └── test/
+  │           ├── Apple black_spot/
+  │           ├── Apple Brown_spot/
+  │           └── Apple Normal/
+  ├── model/                         ← Generated after training
+  │   ├── apple_leaf_model.h5
+  │   ├── apple_leaf_model.keras
+  │   ├── class_indices.json
+  │   ├── history_head.csv
+  │   └── history_fine.csv
+  ├── static/
+  │   ├── css/style.css              ← Web app styles
+  │   └── js/app.js                  ← Frontend logic (webcam, upload)
+  ├── templates/
+  │   └── index.html                 ← Main web page
+  ├── train_model.py                 ← Training script
+  ├── app.py                         ← Flask web server
+  ├── requirements.txt               ← Python dependencies
+  └── README.md
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 7 — HOW TO TRAIN THE MODEL (STEP BY STEP SETUP)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PREREQUISITES:
+  - Python 3.9, 3.10, or 3.11 (recommended)
+  - pip installed
+  - At least 4 GB RAM (8 GB+ recommended)
+  - GPU optional but speeds up training significantly
+
+─── Step 1: Clone / Download the Project ───────────────────────────────────────
+
+  If from GitHub:
+    git clone https://github.com/hmad-ait-lahmous/Apple-leafs-classification.git
+    cd Apple-leafs-classification
+
+─── Step 2: Install Dependencies ───────────────────────────────────────────────
+
+  pip install -r requirements.txt
+
+  What gets installed:
+    - tensorflow >= 2.12.0   (deep learning framework)
+    - flask >= 3.0.0          (web server)
+    - pillow >= 10.0.0        (image loading/processing)
+    - numpy >= 1.24.0         (array math)
+
+─── Step 3: Download and Set Up the Dataset ────────────────────────────────────
+
+  1. Go to Kaggle: https://www.kaggle.com/datasets/emmarex/plantdisease
+     (or any PlantVillage Apple leaf dataset)
+  2. Download and extract it
+  3. Create the folder structure:
+       leafs/Apple/train/Apple black_spot/
+       leafs/Apple/train/Apple Brown_spot/
+       leafs/Apple/train/Apple Normal/
+       leafs/Apple/test/Apple black_spot/
+       leafs/Apple/test/Apple Brown_spot/
+       leafs/Apple/test/Apple Normal/
+  4. Place the corresponding leaf images in each folder
+
+─── Step 4: Run Training ───────────────────────────────────────────────────────
+
+  python train_model.py
+
+  What you will see in the terminal:
+    - Classes: {'Apple black_spot': 0, 'Apple Brown_spot': 1, 'Apple Normal': 2}
+    - Train samples: XXXX | Val: XXXX | Test: XXXX
+    - Model summary (layer-by-layer list)
+    - === Phase 1: Training head ===
+        Epoch 1/10 ... loss: X.XX - accuracy: 0.XX - val_accuracy: 0.XX
+        ...
+    - === Phase 2: Fine-tuning ===
+        Epoch 1/20 ... loss: X.XX - accuracy: 0.XX - val_accuracy: 0.XX
+        ...
+    - === Test Evaluation ===
+        Test accuracy: 0.XXXX | Test loss: 0.XXXX
+    - Model saved to: model/
+
+  Expected training time:
+    - CPU only : 30–60 minutes
+    - With GPU : 5–15 minutes
+
+─── Step 5: Verify Output ──────────────────────────────────────────────────────
+
+  After training, verify these files exist:
+    model/apple_leaf_model.h5
+    model/class_indices.json
+
+  Open model/history_head.csv and model/history_fine.csv to see accuracy trends.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 8 — HOW TO USE AND TEST THE MODEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+─── Method A: Web App (Recommended) ────────────────────────────────────────────
+
+  1. Make sure model/apple_leaf_model.h5 exists (run training first)
+  2. Start the server:
+       python app.py
+  3. Open browser → http://localhost:5000
+  4. Use either:
+       a) Upload Tab  → Click "Choose Image" → select an apple leaf photo
+       b) Webcam Tab  → Allow camera → hold leaf in front of camera
+          (Auto-analyze mode takes a snapshot every few seconds)
+  5. The app will show:
+       - Class name (e.g., "Apple Black Spot")
+       - Confidence percentage (e.g., 92.4%)
+       - Probability scores for all 3 classes
+       - Specific care tips tailored to the diagnosis
+       - Time taken for inference (in ms)
+
+─── Method B: Python Script (Manual Test) ──────────────────────────────────────
+
+  Create a file called test_predict.py and run it:
+
+  ─────────────────────────────────────────────────────────────
+  import json, numpy as np
+  from PIL import Image
+  import tensorflow as tf
+
+  # Load model and class map
+  model = tf.keras.models.load_model("model/apple_leaf_model.h5")
+  with open("model/class_indices.json") as f:
+      class_indices = json.load(f)
+  idx_to_class = {v: k for k, v in class_indices.items()}
+
+  # Load and preprocess image
+  img = Image.open("your_apple_leaf.jpg").convert("RGB").resize((224, 224))
+  arr = np.array(img, dtype=np.float32) / 255.0
+  arr = np.expand_dims(arr, axis=0)  # shape: (1, 224, 224, 3)
+
+  # Predict
+  preds = model.predict(arr)[0]
+  pred_idx = int(np.argmax(preds))
+  print(f"Predicted class : {idx_to_class[pred_idx]}")
+  print(f"Confidence      : {preds[pred_idx]*100:.1f}%")
+  print(f"All scores      : { {idx_to_class[i]: round(float(preds[i])*100,1) for i in range(len(preds))} }")
+  ─────────────────────────────────────────────────────────────
+
+  Replace "your_apple_leaf.jpg" with your actual image path.
+
+─── Method C: API Test with curl ───────────────────────────────────────────────
+
+  While the web app is running (python app.py), you can test the REST endpoint:
+
+  Health check:
+    curl http://localhost:5000/health
+
+  Image upload prediction:
+    curl -X POST http://localhost:5000/predict \
+         -F "file=@/path/to/apple_leaf.jpg"
+
+  Response format (JSON):
+    {
+      "class_name": "Apple black_spot",
+      "label": "Tache Noire (Black Spot)",
+      "severity": "moderate",
+      "emoji": "🟠",
+      "confidence": 92.4,
+      "all_scores": { "Apple black_spot": 92.4, "Apple Brown_spot": 5.2, "Apple Normal": 2.4 },
+      "summary": "Your apple leaf shows signs of Black Spot disease...",
+      "tips": [ {...}, {...}, ... ],
+      "elapsed_ms": 47
+    }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 9 — WHAT TYPE OF IMAGES TO USE FOR TESTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The model was trained on PlantVillage-style apple leaf photos.
+For best prediction accuracy, your test images must match the training data
+distribution as closely as possible.
+
+─── IDEAL IMAGE CHARACTERISTICS ────────────────────────────────────────────────
+
+  ✅ DO use:
+     - Subject  : A single apple leaf (Malus domestica)
+     - Background: Plain white, light gray, or clean neutral background
+                  (PlantVillage dataset uses uniform backgrounds)
+     - Focus    : Leaf clearly in focus (sharp, not blurry)
+     - Lighting : Even, bright natural or indoor lighting — no harsh shadows
+     - Framing  : Leaf fills most of the frame (80–90% of image area)
+     - Format   : JPG or PNG
+     - Orientation: Any (model handles rotation via augmentation)
+     - Zoom     : Close-up of the leaf surface, showing any spots/lesions clearly
+
+  ❌ AVOID:
+     - Multiple leaves in one photo
+     - Very dark or overexposed images
+     - Blurry or out-of-focus images
+     - Non-apple leaves (the model is specific to apple)
+     - Heavily cluttered backgrounds (branches, soil, etc.)
+     - Fruit, stems, or bark photos (model is leaf-only)
+     - Very small leaf in a large empty frame
+
+─── WHAT THE MODEL LOOKS FOR ───────────────────────────────────────────────────
+
+  Class: Apple Normal
+    → Uniform green color, no spots, no discoloration
+    → Smooth leaf surface with no lesions
+
+  Class: Apple Black Spot
+    → Dark brown / black circular spots scattered on the leaf
+    → Caused by Alternaria mali fungus
+    → May appear as small dots to large patches
+
+  Class: Apple Brown Spot
+    → Brown lesions, sometimes with yellow halos
+    → Often more irregular in shape than black spot
+    → May indicate Marssonina coronaria or nutrient deficiency
+
+─── IMAGE RESOLUTION ───────────────────────────────────────────────────────────
+
+  - Input to model: 224×224 pixels (automatic resize via the app)
+  - Source image can be any size — PIL will resize it before inference
+  - Recommended source: at least 400×400 pixels for clear details
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 10 — KEY CONCEPTS SUMMARY (QUICK REFERENCE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌──────────────────────────────┬────────────────────────────────────────────┐
+  │  Concept                     │  Explanation                               │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  CNN                         │  Convolutional Neural Network — learns     │
+  │                              │  visual patterns (edges, shapes, textures) │
+  │                              │  from images using sliding filters         │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  Transfer Learning           │  Reuse a model trained on a large dataset  │
+  │                              │  (ImageNet) and adapt it to a new task     │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  Fine-Tuning                 │  Unfreeze and retrain the top layers of    │
+  │                              │  the base model at a very low LR           │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  MobileNetV2                 │  Efficient CNN using depthwise separable   │
+  │                              │  convolutions → small, fast, accurate      │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  Data Augmentation           │  Artificially create variations of images  │
+  │                              │  (flip, rotate, zoom) to prevent overfit   │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  Overfitting                 │  When model memorizes training data but    │
+  │                              │  performs poorly on new images             │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  Dropout                     │  Randomly disables neurons during training │
+  │                              │  to prevent overfitting                    │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  Softmax                     │  Converts raw scores into probabilities    │
+  │                              │  (all classes sum to 100%)                 │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  Categorical Crossentropy    │  Loss function for multi-class problems    │
+  │                              │  Penalizes wrong class predictions         │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  Adam Optimizer              │  Adaptive learning rate optimizer          │
+  │                              │  Combines momentum + RMSProp               │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  EarlyStopping               │  Halts training when val_loss stops        │
+  │                              │  improving (avoids wasted compute time)    │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  ReduceLROnPlateau           │  Reduces learning rate when training       │
+  │                              │  stalls, allowing finer optimization       │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  GlobalAveragePooling2D      │  Compresses feature maps to a flat vector  │
+  │                              │  (reduces parameters, prevents overfit)    │
+  ├──────────────────────────────┼────────────────────────────────────────────┤
+  │  BatchNormalization          │  Normalizes activations for each batch     │
+  │                              │  → faster training, more stable gradients  │
+  └──────────────────────────────┴────────────────────────────────────────────┘
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 11 — TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Problem: "No such file: model/apple_leaf_model.h5"
+  Fix    : Run python train_model.py first to generate the model file.
+
+  Problem: "No such file or directory: leafs/Apple/train"
+  Fix    : Download the dataset and set up the folder structure as in Section 3.
+
+  Problem: Low accuracy on test images
+  Fix    : Make sure your images look similar to training data (see Section 9).
+           Avoid cluttered backgrounds and blurry images.
+
+  Problem: tensorflow not found
+  Fix    : pip install tensorflow>=2.12.0
+
+  Problem: Training is very slow
+  Fix    : Install a CUDA-compatible GPU driver + tensorflow-gpu for speedup.
+           Or reduce BATCH_SIZE to 16 if running out of RAM.
+
+  Problem: "Address already in use" when starting app.py
+  Fix    : Another process is using port 5000. Either kill it or change port:
+           app.run(debug=True, host="0.0.0.0", port=5001)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 12 — DEPENDENCIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  From requirements.txt:
+    tensorflow  >= 2.12.0   → Deep learning (model training + inference)
+    flask       >= 3.0.0    → Web server and REST API
+    pillow      >= 10.0.0   → Image loading, resizing, format conversion
+    numpy       >= 1.24.0   → Array manipulation and math operations
+
+  Install all with: pip install -r requirements.txt
+
+
+================================================================================
+ END OF GUIDE
+================================================================================

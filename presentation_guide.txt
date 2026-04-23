@@ -1,0 +1,267 @@
+================================================================================
+  PRESENTATION GUIDE — AppleLeaf AI Leaf Health Analyzer
+  Author : Hmad AIT LAHMOUS  |  Date: 2026-04-22
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 1 — SUGGESTED SLIDE OUTLINE  (10 slides, ~10 min)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  #1   Cover            — Project title, author, tagline
+  #2   Problem          — Why automated apple disease detection matters
+  #3   Dataset          — PlantVillage, 3 classes, ~2353 images
+  #4   CNN & MobileNetV2— What the model is and why it was chosen
+  #5   Architecture     — Layer-by-layer stack (input → softmax)
+  #6   Training Phase 1 — Head training (frozen base, Adam 1e-3, 10 epochs)
+  #7   Training Phase 2 — Fine-tuning (last 30 layers, Adam 1e-4, 20 epochs)
+  #8   Total Workflow   — End-to-end pipeline diagram
+  #9   Web App Demo     — Flask app, upload/webcam, JSON response
+  #10  Results & Q&A    — Accuracy, inference time, future work
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 2 — THE CNN MODEL: HOW WE TREAT IT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+─── 2.1  Why MobileNetV2? ──────────────────────────────────────────────────────
+
+  • Lightweight CNN by Google (2018) — runs fast on CPU/web servers
+  • Uses Depthwise Separable Convolutions → ~8–9× fewer ops vs standard CNN
+  • Pre-trained on ImageNet (1.2M images, 1000 classes)
+  • We did NOT train from scratch — we reused its learned visual knowledge
+
+  One-liner for your audience:
+    "MobileNetV2 already knows how to see edges, textures, and shapes.
+     We just taught it to recognize apple leaf diseases specifically."
+
+─── 2.2  Transfer Learning in One Sentence ─────────────────────────────────────
+
+  Reuse a model trained on millions of images and adapt only the last
+  layers to our new task — saving time, data, and compute.
+
+─── 2.3  Fine-Tuning in One Sentence ───────────────────────────────────────────
+
+  After the new head converges, we unfreeze the top 30 layers of
+  MobileNetV2 and retrain them at a very low LR so they adapt to
+  apple-leaf-specific visual patterns without forgetting everything.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 3 — MODEL ARCHITECTURE (layer by layer)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │   INPUT  (224 × 224 × 3)   ← RGB apple leaf photo                      │
+  │       ↓                                                                 │
+  │   MobileNetV2 BASE  (frozen in Ph.1 / partially unfrozen in Ph.2)      │
+  │     · Pre-trained on ImageNet                                           │
+  │     · Extracts rich features: edges, textures, shapes                  │
+  │     · Output: feature map  7 × 7 × 1280                                │
+  │       ↓                                                                 │
+  │   GlobalAveragePooling2D   → compresses to 1280-dim vector             │
+  │       ↓                                                                 │
+  │   BatchNormalization       → stabilizes activations                    │
+  │       ↓                                                                 │
+  │   Dense(256, ReLU)         → learns high-level combinations            │
+  │       ↓                                                                 │
+  │   Dropout(0.4)             → prevents overfitting                      │
+  │       ↓                                                                 │
+  │   Dense(128, ReLU)         → deeper abstraction                        │
+  │       ↓                                                                 │
+  │   Dropout(0.3)                                                          │
+  │       ↓                                                                 │
+  │   Dense(3, Softmax)        → OUTPUT: probability for each class        │
+  │                                                                         │
+  │   Classes:  Apple Normal | Apple Black Spot | Apple Brown Spot         │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  Key design choices to mention:
+    • GlobalAveragePooling → fewer parameters than Flatten, less overfitting
+    • Two Dense layers with Dropout → strong regularization for small dataset
+    • Softmax output → gives interpretable % confidence per disease class
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 4 — TRAINING STRATEGY (2 Phases)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ╔══════════════════════════════╦══════════════════════════════╗
+  ║  PHASE 1 — Head Training     ║  PHASE 2 — Fine-Tuning       ║
+  ╠══════════════════════════════╬══════════════════════════════╣
+  ║  Base: FULLY FROZEN          ║  Base: last 30 layers OPEN   ║
+  ║  Only Dense layers train     ║  All other layers stay frozen ║
+  ║  Adam LR = 1e-3              ║  Adam LR = 1e-4 (10× lower)  ║
+  ║  Max 10 epochs               ║  Max 20 epochs               ║
+  ║  EarlyStopping (patience=4)  ║  EarlyStopping (patience=6)  ║
+  ║  ReduceLROnPlateau (×0.5)    ║  ReduceLROnPlateau (×0.3)    ║
+  ║  CSVLogger → history_head    ║  ModelCheckpoint (best val)  ║
+  ║                              ║  CSVLogger → history_fine    ║
+  ╚══════════════════════════════╩══════════════════════════════╝
+
+  WHY two phases?
+    Phase 1 → teach the new classification head quickly using frozen features.
+    Phase 2 → let the top of the backbone also adapt, boosting accuracy further
+               while keeping a low LR so we don't destroy what it already knows.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 5 — TOTAL WORKFLOW (End-to-End)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ① DATA COLLECTION
+       PlantVillage dataset (Kaggle)
+       ~2353 training images across 3 apple leaf classes
+       Organized into  leafs/Apple/train/  and  leafs/Apple/test/
+
+  ② DATA PREPARATION
+       Rescale pixels 0–255 → 0.0–1.0
+       Augmentation: rotation ±20°, shift ±15%, zoom ±20%, flip, brightness
+       Validation split: 15% held out automatically
+
+  ③ MODEL SETUP
+       Load MobileNetV2 (ImageNet weights, no top)
+       Add custom head: GAP → BN → Dense256 → Drop → Dense128 → Drop → Dense3
+
+  ④ PHASE 1 — HEAD TRAINING
+       Freeze base, train only head
+       Adam 1e-3, up to 10 epochs, EarlyStopping
+
+  ⑤ PHASE 2 — FINE-TUNING
+       Unfreeze last 30 base layers
+       Adam 1e-4, up to 20 epochs, ModelCheckpoint
+
+  ⑥ EVALUATION
+       Evaluate on held-out test set
+       Report: Test Accuracy + Test Loss
+       Training history saved to  model/history_head.csv  &  history_fine.csv
+
+  ⑦ EXPORT
+       model/apple_leaf_model.h5     ← used by the web app
+       model/class_indices.json      ← class name ↔ index mapping
+
+  ⑧ INFERENCE (Web App)
+       User uploads photo (or uses webcam)
+       app.py loads .h5 model, resizes image to 224×224, runs predict()
+       Returns JSON: class name, confidence %, care tips, inference time (ms)
+
+  ⑨ WEB INTERFACE
+       Flask backend + HTML/CSS/JS frontend
+       Upload tab + Webcam tab (auto-analyze every few seconds)
+       REST API: POST /predict  →  JSON response
+       Runs at: http://localhost:5000
+
+  ─── Diagram (paste on one slide) ───────────────────────────────────────────
+
+  [Raw Images] → [Augmentation] → [MobileNetV2 Backbone]
+                                         ↓
+                              [GAP → BN → Dense → Softmax]
+                                         ↓
+                     ┌───────────────────┴───────────────────┐
+               [Phase 1: Train Head]               [Phase 2: Fine-Tune]
+                     └───────────────────┬───────────────────┘
+                                         ↓
+                              [Saved Model (.h5)]
+                                         ↓
+                         [Flask API] → [Web Interface]
+                                         ↓
+                         [Prediction + Confidence + Care Tips]
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 6 — AI PROMPT (paste into Gamma.app or ChatGPT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+════════════════════════════ [START PROMPT] ═════════════════════════════════════
+
+Create a 10-slide professional presentation for a machine learning project.
+
+PROJECT: AppleLeaf — AI Leaf Health Analyzer
+AUTHOR : Hmad AIT LAHMOUS
+TYPE   : Deep Learning / Computer Vision / Flask Web App
+
+TASK: Classify apple leaf photos into 3 classes:
+  • Apple Normal (healthy)
+  • Apple Black Spot (Alternaria mali fungus)
+  • Apple Brown Spot (Marssonina coronaria)
+
+MODEL: MobileNetV2 (Transfer Learning + Fine-Tuning)
+  Framework : TensorFlow / Keras
+  Input     : 224 × 224 RGB image
+  Output    : Softmax probabilities over 3 classes
+
+ARCHITECTURE (layer by layer):
+  Input (224×224×3) → MobileNetV2 base (frozen/partially frozen, ImageNet weights,
+  outputs 7×7×1280) → GlobalAveragePooling2D (→ 1280-dim) → BatchNormalization →
+  Dense(256, ReLU) → Dropout(0.4) → Dense(128, ReLU) → Dropout(0.3) →
+  Dense(3, Softmax)
+
+TRAINING STRATEGY (2 phases):
+  Phase 1 — Freeze base, train head only. Adam LR=1e-3. Max 10 epochs.
+             EarlyStopping(patience=4), ReduceLROnPlateau(×0.5).
+  Phase 2 — Unfreeze last 30 base layers. Adam LR=1e-4. Max 20 epochs.
+             ModelCheckpoint, EarlyStopping(patience=6), ReduceLROnPlateau(×0.3).
+
+DATASET: PlantVillage (Kaggle). ~2353 training images. 15% validation split.
+  Augmentation: rotation±20°, shift±15%, zoom±20%, horizontal flip, brightness±20%.
+
+WEB APP: Flask backend + HTML/CSS/JS frontend.
+  Features: image upload, real-time webcam, REST API (/predict → JSON).
+  JSON response includes: class_name, confidence %, all_scores, care tips, elapsed_ms.
+
+SLIDE STRUCTURE:
+  1. Cover — Title, author, tagline
+  2. Problem — Apple disease cost, manual inspection limits
+  3. Dataset — PlantVillage, 3 classes, image counts, augmentation
+  4. CNN & MobileNetV2 — What it is, depthwise separable convolutions, why chosen
+  5. Architecture — Visual layer-by-layer diagram input→softmax
+  6. Training Phase 1 — Frozen base, head training, callbacks
+  7. Training Phase 2 — Fine-tuning last 30 layers, low LR, callbacks
+  8. Total Workflow — End-to-end pipeline diagram
+  9. Web App Demo — Upload/webcam UI, JSON output, inference speed
+  10. Results & Q&A — Accuracy, future work, thank you
+
+STYLE: Dark forest green (#1B4332) background, white text, gold (#D4A017) accents.
+Font: Poppins or Inter. 16:9 widescreen. Max 5 bullets per slide.
+For each slide, give: Title, bullet points (≤10 words each), speaker notes (2–3 sentences).
+
+════════════════════════════ [END PROMPT] ═══════════════════════════════════════
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 7 — QUICK SPEAKER NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  On CNN:
+    "A CNN learns to see patterns — first edges, then shapes, then complex
+     objects — by passing filters over the image. MobileNetV2 does this
+     very efficiently using depthwise separable convolutions."
+
+  On Transfer Learning:
+    "Imagine a biologist who already understands what leaves look like.
+     They don't start from zero — they just study apple diseases.
+     That's exactly what transfer learning does for our model."
+
+  On the 2-Phase Strategy:
+    "Phase 1 is like installing new hardware in an existing machine —
+     we only add and train the new parts. Phase 2 is fine calibration —
+     we let the machine slightly readjust itself for our exact use case."
+
+  On the Demo:
+    "I upload this leaf photo. The model processes it in under 50ms
+     and returns: Black Spot, 92% confidence, plus care recommendations."
+
+  Common Q&A:
+    Q: Why not ResNet or VGG?
+    A: MobileNetV2 is 8–9× more compute-efficient. Perfect for web/mobile.
+
+    Q: How accurate is it?
+    A: Training history is in history_fine.csv. The 2-phase strategy
+       consistently boosts val_accuracy over single-phase training.
+
+    Q: Can it detect other diseases?
+    A: Yes — add more labeled classes and retrain. The pipeline is reusable.
+
+================================================================================
+  END OF PRESENTATION GUIDE
+================================================================================

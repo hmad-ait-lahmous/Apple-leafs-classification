@@ -31,6 +31,7 @@ function onDrop(e) {
   document.getElementById('dropzone').classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
   if (file && file.type.startsWith('image/')) {
+    document.getElementById('fileInput').files = e.dataTransfer.files;
     loadFilePreview(file);
   }
 }
